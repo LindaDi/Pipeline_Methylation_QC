@@ -60,7 +60,7 @@ writeLines(capture.output(sessionInfo()), "sessionInfo.txt")
 # Sample_Name	Sample_Well	Sample_Plate	Slide	Array	Basename
   # pathfolder/slide/slide_array
 # the column for the path must be named "Basename"
-# most easiest to make in excel a new column "path" with the path tho the files
+# most easiest to make in excel a new column "path" with the path to the files
 # then make a new column named "Basename" and use a formula: path & slide & "/" & slide & "_" & array
 # e.g. (=A2&B2&"/" ...)
 # pull the entries down, so that this is filled in for all
@@ -244,7 +244,7 @@ save(annot,file="RData/annot_clean.Rdata")
 # there are a lot of different normalization methods, the best depends also on study design and question
 # noob is for background correction, and often a good first step, see e.g. https://www.biostars.org/p/149628/)
 # Quantile normalization, is used in  the pipeline 
-  # and also recommended for studies without big differences in samples (e.g. cancer-control) from Fortin
+  # and also recommended for studies without big differences in samples (e.g. case-control) from Fortin
   # IF you have quite different samples (e.g. different tissues, experimental design etc) it is better to use FunNorm from minfi
 # BMIQ is also very common and was suggested in combination with other methods (e.g. noob: Liu et al. 2016, or QN (from lumi package):Marabita et al. 2013, Wang et al. 2015 -> but from R pckg lumi)
   # note regarding BMIQ: BMIQ from wateRmelon might be not stable, especially after minfi quantile -> used an original version from Andrew Teschendorff
@@ -557,7 +557,7 @@ anova(lm(Prin.comp$PC4~Prin.comp$Array))
 ## Model matrix for batch-corrections (May need to adjust model matrix to 'protect' coefficients (study specific)):
 mod <- model.matrix(~1, data=pd_clean)
 
-## Run ComBat to remove plate batch effects
+## Run ComBat to remove most significant batch effects itertively
 M_combat_1plate = ComBat(mval,batch = pd_clean$Sample_Plate, mod = mod)
 save(M_combat_1plate,file="RData/M_combat_1plate.Rdata")
 
@@ -631,7 +631,7 @@ anova(lm(Prin.comp$PC2~Prin.comp$Array))
 anova(lm(Prin.comp$PC3~Prin.comp$Array)) 
 anova(lm(Prin.comp$PC4~Prin.comp$Array)) 
 
-#third correction for arry
+#third correction for array
 mod <- model.matrix(~1, data=pd_clean)
 M_combat_3array = ComBat(M_combat_2slide,batch = pd_clean$Array, mod = mod)
 save(M_combat_3array,file="RData/M_combat_3array.Rdata")       
@@ -698,7 +698,8 @@ save(Betas_combated_ExprSet,file="RData/Betas_combated_ExprSet.Rdata")
 
 #################################################################################
 #################################################################################
-### We also combat our data set with no probes removed, in case all CpGs are needed.
+### We also combat our data set with no probes removed, 
+### in case all CpGs are needed (e.g. for epigenetic clocks), i.e. when you need to avoid missing values (CpGs) even at costs.
 
 load("RData/BMIQ.quantileN.Rdata")
 
