@@ -12,4 +12,4 @@ In Methods.docx you find a draft describing the steps done in this pipeline.
 
 If you want to do a check with MixedUp Mapper, you find additional instructions and things you need in the respective folder.
 
-Please remember to always cite the R packages and softwares used.
+Please remember to always cite the R packages and software used.
