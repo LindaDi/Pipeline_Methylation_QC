@@ -45,6 +45,7 @@ setwd("/folder/")
   # BMIQ normalization function from Teschendorff
   # folder files_for_mixup (empty)
   # folder finalData (empty)
+  # folder probes_info (empty) and subfolder Gaphunter_default_values (empty)
 
 writeLines(capture.output(sessionInfo()), "sessionInfo.txt")
 
@@ -960,91 +961,68 @@ write.table(genotypemethylationcoupling, file="files_for_mixup/genotypemethylati
 #################################################################################
 # add if you want:
 
-### GAPHUNTER ###
-
-# Step 4: R-code for detecting outliers using gaphunter
-# prepared by: Sinjini Sikdar and adapted by: N Fernandez-Jimenez - nora.fernandez@ehu.eus (16/03/2018)
-# Line 74 - modified by MKL(mikyeong.lee@nih.gov) to keep the digits after the decimal ## Dec 12, 2017 
-## A final outlier-removed beta file ("Beta4ewas.Rda")
-
-# Required input & parameters
-N <- ncol(Betas_combated_mixc) ## No. of samples in your data. 
-gapsize <- 0.3    ## Gap size between the outliers and all other values. We have used 0.3 in our analysis.
-cutoff <- ifelse(5>(0.25/100)*N,5/N,0.0025)   ## This cutoff is chosen for detecting probes with outliers. We have chosen this
-## cutoff such that a probe can have a maximum of 5 or 0.0025 of the total number                                                
-## of samples (whichever is larger) as outliers. Can change it if required.
+### GAPHUNTER with default values###
+# Required input is the combated beta matrix with final samples 
+Nsamples <- ncol(Betas_combated_mixc) ## No. of samples in your data. 
 
 ## Note: If gap hunter returns error as it may not detect any outlier, please reduce the gap size or increase the cutoff.
-beta_matrix<-Betas_combated_mixc
-# Program for gap-hunter
+beta_matrix_gap <-Betas_combated_mixc
+
 ## log files for identifying missing values (NAs) before running gaphunter
-probes_log_before <- data.frame(probes=rownames(beta_matrix),no_missing_before=apply(beta_matrix, 1, function(x) sum(is.na(x))))
-samples_log_before <- data.frame(samples=colnames(beta_matrix),no_missing_before=apply(beta_matrix, 2, function(x) sum(is.na(x))))
+probes_log_before <- data.frame(probes=rownames(beta_matrix_gap),no_missing_before=apply(beta_matrix_gap, 1, function(x) sum(is.na(x))))
+# for every probe: in how many samples missing
+length(probes_log_before$no_missing_probes > 0)
+dim(probes_log_before)
+# you can see your number of probes (e.g. 665190)
+
+samples_log_before <- data.frame(samples=colnames(beta_matrix_gap),no_missing_before=apply(beta_matrix_gap, 2, function(x) sum(is.na(x))))
+# for every sample: how many probesmissing
 
 ## imputation (as gaphunter cannot handle missing values)
-beta1 <- t(apply(beta_matrix,1,function(x) ifelse(is.na(x),median(x,na.rm=T),x)))          
+table(is.na(beta_matrix_gap)) 
+# if NAs:
+beta_imputed <- t(apply(beta_matrix_gap,1,function(x) ifelse(is.na(x),median(x,na.rm=T),x)))          
 
 ## gaphunter
-library(minfi)
-gapres <- gaphunter(beta1,keepOutliers=TRUE,threshold=gapsize,outCutoff=cutoff)
-# note in excel
-gapres1 <- gaphunter(beta1,keepOutliers=FALSE,threshold=gapsize,outCutoff=cutoff)
+gapres_woutliers <- gaphunter(beta_imputed,keepOutliers=TRUE,threshold=0.05,outCutoff=0.01)
+# running gaphunter with outliers (Should outlier-driven gap signals be kept in the results? Defaults is FALSE)
+gapres_nooutliers <- gaphunter(beta_imputed,keepOutliers=FALSE,threshold=0.05,outCutoff=0.01)
+# running gaphunter withoout outliers
+## -> note for results.
 
+# further explanations.
+# What is gaphunter doing?
+# The function will idenfity probes with a gap in a beta signal greater than or equal to the defined threshold. 
+# These probes constitute an additional, dataset-specific subset of probes that merit special consideration due to their tendency to be driven by 
+# an underlying SNP or other genetic variant. In this manner, these probes can serve as surrogates for underlying genetic signal locally and/or in a broader (i.e. haplotype) context. 
+# Outlier-driven gap signals are those in which the sum of the smaller group(s) does not exceed a certain percentage of the sample size, defined by the argument outCutoff.
 
-all_signals_probes <- gapres$proberesults
-all_signals_samples <- gapres$sampleresults
-all_signals_all <- merge(all_signals_probes,all_signals_samples,by.x="row.names",by.y="row.names")
-without_outlier_signals_probes <- gapres1$proberesults
-outlier <- setdiff(rownames(all_signals_probes),rownames(without_outlier_signals_probes))  ## probes with outliers
-outlier_signals_all <- all_signals_all[which(all_signals_all[,1]%in%outlier),]          
-no_incl <- max(outlier_signals_all$Groups)+2
-colnames(outlier_signals_all) <- c("probes",colnames(outlier_signals_all)[2:no_incl],colnames(beta1))
+# the output of gaphunter is a list with 3 values
+# proberesults = A data frame listing, for each identified gap signal, the number of groups and the size of each group.
+# sampleresults = a matrix of dimemsions probes (rows) by samples (columns). 
+# Individuals are assigned numbers based onthe groups into which they cluster. Lower number groups indicate lower mean methylation values for the group. 
+# For example, individuals coded as ‘1’ will have a lower mean methylation value than those individuals coded as ‘2’.
+# algorithm
 
-new_beta <- NULL
-for(p in 1:nrow(outlier_signals_all)){
-  group_number <- as.numeric(strsplit(names(which.max(outlier_signals_all[p,3:no_incl])),"")[[1]][6])
-  df2 <- outlier_signals_all[p,c(rep(TRUE,no_incl),outlier_signals_all[p,-c(1:no_incl)]!=group_number)]
-  sub_int <- colnames(df2)[-c(1:no_incl)]
-  beta_out <- beta_matrix[which(rownames(beta_matrix)%in%df2$probes),]
-  beta_out[names(beta_out)%in%sub_int] <- NA
-  new_beta <- rbind(new_beta,c(probes=df2$probes,beta_out))
-}
+save(gapres_woutliers, file="probes_info/Gaphunter_default_values/gapres_woutliers.Rdata")
+save(gapres_nooutliers, file="probes_info/Gaphunter_default_values/gapres_nooutliers.Rdata") # you can use the probes for flagging
 
-rownames(new_beta) <- new_beta[,1]
-new_beta_1 <- data.frame(new_beta[,-1],check.names=FALSE)
-beta2 <- as.data.frame(beta_matrix)
-beta2[match(rownames(new_beta_1),rownames(beta2)), ] <- new_beta_1
+gapres_woutliers_probes <- gapres_woutliers$proberesults
+gapres_woutliers_samples <- gapres_woutliers$sampleresults
+colnames(gapres_woutliers_samples) <- colnames(beta_imputed)
 
-betas_after_gap <- beta2
-# Outputs
-## Final beta matrix (saved as betas_after_gap in .Rda format) with all outliers detected as NAs. 
-save(betas_after_gap, file="RData/betas_after_gap.Rda")
-## We have the same beta matrix as before (input matrix) with additional NAs for extreme outliers.
-beta_matrix[is.na(new_beta_1)] <- NA; 
-Betas_gapped <- beta_matrix
-save(Betas_gapped, file = "RData/Betas_gapped.Rda") ## Use this for further analysis
-dim(Betas_gapped) 
+gapres_nooutliers_probes <- gapres_nooutliers$proberesults
+gapres_nooutliers_samples <- gapres_nooutliers$sampleresults
+colnames(gapres_nooutliers_samples)<- colnames(beta_imputed)
 
-load("RData/Betas_gapped.Rda")
-## log files in .csv formats. These log files will have columns with:
-## probe/sample names: "probes"/"samples", 
-## number of missing values (NAs) before running gaphunter: "no_missing_before", 
-## number of missing values (NAs including outliers) after running gaphunter: "no_missing after",
-## number of outliers identified by gaphunter: "outlier_gaphunter", and 
-## the percentage of (non-missing) samples/probes identified as outliers by gaphunter: "percent_outlier_gaphunter".
+save(gapres_woutliers, file="probes_info/Gaphunter_default_values/gapres_woutliers.Rdata")
+save(gapres_nooutliers, file="probes_info/Gaphunter_default_values/gapres_nooutliers.Rdata")
 
-probes_log_after <- data.frame(probes=rownames(betas_after_gap),no_missing_after=apply(betas_after_gap, 1, function(x) sum(is.na(x))))
-log_probes_combined <- merge(probes_log_before,probes_log_after,by.x="probes",by.y="probes",all.x=TRUE,all.y=TRUE)
-log_probes_combined$outlier_gaphunter <- log_probes_combined$no_missing_after-log_probes_combined$no_missing_before
-log_probes_combined$percent_outlier_gaphunter <- (log_probes_combined$outlier_gaphunter/(ncol(betas_after_gap)-log_probes_combined$no_missing_before))*100
-write.table(log_probes_combined,"Gaphunter_CpGs.txt",quote=F,row.names=F,sep="\t")
+write.csv(gapres_woutliers_probes,"probes_info/Gaphunter_default_values/gapres_woutliers_probes.csv",row.names=T)  
+write.csv(gapres_woutliers_samples,"probes_info/Gaphunter_default_values/gapres_woutliers_samples.csv",row.names=T)  
 
-samples_log_after <- data.frame(samples=colnames(betas_after_gap),no_missing_after=apply(betas_after_gap, 2, function(x) sum(is.na(x))))
-log_samples_combined <- merge(samples_log_before,samples_log_after,by.x="samples",by.y="samples",all.x=TRUE,all.y=TRUE)
-log_samples_combined$outlier_gaphunter <- log_samples_combined$no_missing_after-log_samples_combined$no_missing_before
-log_samples_combined$percent_outlier_gaphunter <- (log_samples_combined$outlier_gaphunter/(nrow(betas_after_gap)-log_samples_combined$no_missing_before))*100
-write.csv(log_samples_combined,"Gaphunter_samples.csv")  
-write.table(log_samples_combined,"Gaphunter_samples.txt",quote=F,row.names=F,sep="\t")
+write.csv(gapres_nooutliers_probes,"probes_info/Gaphunter_default_values/gapres_nooutliers_probes.csv",row.names=T)  
+write.csv(gapres_nooutliers_samples,"probes_info/Gaphunter_default_values/gapres_nooutliers_samples.csv",row.names=T) 
 
 #######################################################################################################################################
 
