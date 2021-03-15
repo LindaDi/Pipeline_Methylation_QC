@@ -407,6 +407,15 @@ index<-which(annot2$sex=="Exclude" | annot2$CRSH=="Exclude" | annot2$EUR=="Exclu
 length(index) #62520
 exclude_Chen <-annot2[index,]
 
+keep <- !(rownames(BMIQ.quantileN_filtered) %in% exclude_Chen$Name) 
+table(keep) # -> note output
+BMIQ.quantileN_filtered <- BMIQ.quantileN_filtered[keep,] 
+dim(BMIQ.quantileN_filtered)
+# 721667    137
+keep_ff <- !(featureNames(quantileN_filtered) %in% exclude_Chen$Name) 
+table(keep_ff) #  31116 677767 
+quantileN_filtered <- quantileN_filtered[keep_ff,] 
+
 #not in pipeline, but additionally use data from McCartney et al which are based on EPIC# PMID: 27330998
 exclude_crosshyb <-read.table("addFiles/CpGs_crosshybridizing_EPIC.txt",sep="",header=F)
 keep <- !(rownames(BMIQ.quantileN_filtered) %in% exclude_crosshyb$V1) 
