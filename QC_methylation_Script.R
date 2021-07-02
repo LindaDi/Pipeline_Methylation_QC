@@ -1037,10 +1037,10 @@ write.csv(gapres_nooutliers_samples,"probes_info/Gaphunter_default_values/gapres
 
 #########################################################################################
 # make RGSet with final samples
-load("RData/Betas_combated_ExprSet_/CC.Rdata")
+load("RData/Betas_combated_ExprSet.Rdata")
 laod("RData/RGSet_clean.Rdata")
 
-RGSet_cleaned_final <- RGSet_clean[ , !(colnames(RGSet_qual) %in% sampleNames(Betas_combated_ExprSet))]
+RGSet_cleaned_final <- RGSet_clean[ ,(colnames(RGSet_clean) %in% sampleNames(Betas_combated_ExprSet))]
 RGSet_cleaned_final
 save(RGSet_cleaned_final, file = "finalData/RGSet_cleaned_final.Rdata")
 
